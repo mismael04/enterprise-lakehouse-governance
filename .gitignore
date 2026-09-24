@@ -16,6 +16,7 @@ dist/
 data/
 models/
 terraform.tfvars
+.terraform.lock.hcl
 
 # IDEs
 .vscode/
