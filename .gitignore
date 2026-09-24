@@ -15,6 +15,7 @@ dist/
 *.egg-info/
 data/
 models/
+terraform.tfvars
 
 # IDEs
 .vscode/
