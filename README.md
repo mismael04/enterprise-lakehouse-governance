@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Enterprise E-Commerce Data Lakehouse & Governance
 
 A Terraform-managed AWS data lakehouse demonstrating **data governance, column-level security, serverless analytics, infrastructure as code, and auditability**.
