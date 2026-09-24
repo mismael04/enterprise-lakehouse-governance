@@ -1,0 +1,1 @@
+redshift_admin_password = "SecureAdminPassword123!"

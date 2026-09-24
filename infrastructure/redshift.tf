@@ -29,7 +29,7 @@ resource "aws_redshiftserverless_namespace" "analytics_namespace" {
   ]
 }
 
-# Redshift Serverless Workgroup (High-concurrency analytical compute)
+# Redshift Serverless Workgroup
 resource "aws_redshiftserverless_workgroup" "analytics_workgroup" {
   workgroup_name = "enterprise-analytics-workgroup"
   namespace_name = aws_redshiftserverless_namespace.analytics_namespace.namespace_name
