@@ -1,17 +1,18 @@
--- 1. Create an external schema in Redshift mapping directly to your Lake Formation Glue Data Catalog
-CREATE EXTERNAL SCHEMA IF NOT EXISTS external_ecommerce
-FROM DATA CATALOG
-DATABASE 'ecommerce_data_lake'
-IAM_ROLE 'arn:aws:iam::065320271591:role/redshift-lakeformation-execution-role'
-REGION 'us-east-1';
+-- 1. Test the Finance Analyst Persona (Full Unmasked Access)
+CREATE EXTERNAL SCHEMA external_finance_schema
+FROM DATA CATALOG 
+DATABASE 'ecommerce_lake_v2'
+IAM_ROLE 'arn:aws:iam::065320271591:role/finance-analyst-execution-role';
 
--- 2. High-performance analytical query verifying processed Parquet files with Lake Formation PII enforcement
-SELECT 
-    country,
-    COUNT(DISTINCT invoiceno) AS total_orders,
-    SUM(quantity * unitprice) AS total_revenue
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an"
-GROUP BY 1
-HAVING SUM(quantity * unitprice) IS NOT NULL
-ORDER BY total_revenue DESC
-LIMIT 10;
+-- Should return all columns, including sensitive user_id
+SELECT * FROM external_finance_schema.ecommerce_events LIMIT 5;
+
+
+-- 2. Test the Standard Analyst Persona (Masked PII Access)
+CREATE EXTERNAL SCHEMA external_standard_schema
+FROM DATA CATALOG 
+DATABASE 'ecommerce_lake_v2'
+IAM_ROLE 'arn:aws:iam::065320271591:role/redshift-lakeformation-execution-role';
+
+-- Should return all columns EXCEPT user_id (masked by Lake Formation cell filter)
+SELECT * FROM external_standard_schema.ecommerce_events LIMIT 5;

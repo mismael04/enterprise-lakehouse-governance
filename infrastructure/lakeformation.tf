@@ -17,7 +17,7 @@ resource "aws_lakeformation_lf_tag" "sensitivity_tag" {
 # 3. Associate LF-Tags with the Curated Glue Table
 resource "aws_lakeformation_resource_lf_tags" "table_tag_association" {
   table {
-    database_name = "ecommerce_data_lake"
+    database_name = "ecommerce_lake_v2"
     name          = var.table_name
   }
 
@@ -34,16 +34,16 @@ resource "aws_lakeformation_resource_lf_tags" "table_tag_association" {
   depends_on = [aws_lakeformation_resource.curated_s3_registration]
 }
 
-# 4. Create Data Cells Filter for PII Column-Level Restriction (Exclude customerid for standard analysts)
+# 4. Create Data Cells Filter for PII Column-Level Restriction (Exclude user_id for standard analysts)
 resource "aws_lakeformation_data_cells_filter" "masked_pii_filter" {
   table_data {
-    database_name    = "ecommerce_data_lake"
-    name             = "exclude_pii_customer_id_filter_v2"
+    database_name    = "ecommerce_lake_v2"
+    name             = "exclude_pii_user_id_filter"
     table_catalog_id = data.aws_caller_identity.current.account_id
     table_name       = var.table_name
 
     column_wildcard {
-      excluded_column_names = ["customerid"]
+      excluded_column_names = ["user_id"]
     }
 
     row_filter {
@@ -58,7 +58,7 @@ resource "aws_lakeformation_permissions" "standard_analyst_database_permissions"
   permissions = ["DESCRIBE"]
 
   database {
-    name = "ecommerce_data_lake"
+    name = "ecommerce_lake_v2"
   }
 }
 
@@ -67,7 +67,7 @@ resource "aws_lakeformation_permissions" "standard_analyst_table_describe" {
   permissions = ["DESCRIBE"]
 
   table {
-    database_name = "ecommerce_data_lake"
+    database_name = "ecommerce_lake_v2"
     name          = var.table_name
   }
 }
@@ -78,7 +78,7 @@ resource "aws_lakeformation_permissions" "standard_analyst_filtered_select" {
 
   data_cells_filter {
     table_catalog_id = data.aws_caller_identity.current.account_id
-    database_name    = "ecommerce_data_lake"
+    database_name    = "ecommerce_lake_v2"
     table_name       = var.table_name
     name             = aws_lakeformation_data_cells_filter.masked_pii_filter.table_data[0].name
   }
@@ -94,7 +94,7 @@ resource "aws_lakeformation_permissions" "finance_analyst_permissions" {
   permissions = ["ALL"]
 
   table {
-    database_name = "ecommerce_data_lake"
+    database_name = "ecommerce_lake_v2"
     name          = var.table_name
   }
 }

@@ -1,329 +1,184 @@
-<<<<<<< HEAD
 # Enterprise E-Commerce Data Lakehouse & Governance
 
-A Terraform-managed AWS data lakehouse demonstrating **data governance, column-level security, serverless analytics, infrastructure as code, and auditability**.
+A Terraform-managed AWS data lakehouse that implements **column-level security, data governance, serverless analytics, and audit logging** across a curated e-commerce dataset containing approximately **110 million behavioral records**.
 
-The project builds an S3-based analytical data platform in which curated e-commerce data is registered with the AWS Glue Data Catalog and governed through **AWS Lake Formation**. Amazon Redshift Serverless provides the analytical query layer through Redshift Spectrum, while AWS CloudTrail provides an auditable record of infrastructure and data-access activity.
+Built on curated data from an upstream [AWS Serverless E-Commerce ETL Pipeline](https://github.com/mismael04/ecommerce-serverless-pipeline), this project focuses on the analytics and governance layer: registering data in the AWS Glue Data Catalog, enforcing role-based access through AWS Lake Formation, querying data with Amazon Redshift Serverless, and recording account activity with AWS CloudTrail.
 
-The project specifically demonstrates how the same underlying dataset can be exposed to different analytical roles with different levels of access to sensitive columns.
+## Key Features
 
----
+- **110M+ behavioral records:** Supports analytics on a large-scale e-commerce events dataset.
+- **PII column-level filtering:** Uses AWS Lake Formation data cell filters to prevent standard analysts from accessing `user_id`.
+- **Role-based data access:** Separates standard analytics access from broader finance analyst access.
+- **Serverless analytics:** Queries curated data through Amazon Redshift Serverless and Redshift Spectrum.
+- **Infrastructure as Code:** Provisions AWS resources and permissions using Terraform.
+- **Governance tagging:** Applies Lake Formation tags to classify data by department and sensitivity.
+- **Audit logging:** Configures a multi-region AWS CloudTrail trail with log file validation and centralized S3 storage.
+- **Data quality checks:** Includes SQL checks for missing values, invalid prices, and unexpected event types.
 
-## Architecture & Data Flow
+## Architecture
 
 ```mermaid
-graph LR
+flowchart TD
+    A["Curated E-Commerce Data<br/>S3 · Parquet · ~110M Records"]
+    B["AWS Glue Data Catalog<br/>ecommerce_lake_v2"]
+    C["AWS Lake Formation<br/>LF-Tags & Data Cell Filters"]
+    D["Standard Analyst Role"]
+    E["Finance Analyst Role"]
+    F["Amazon Redshift Serverless<br/>Redshift Spectrum"]
+    G["AWS CloudTrail"]
+    H["S3 Audit Log Bucket"]
 
-    A[S3 Curated Data<br/>Parquet] --> B[AWS Glue Data Catalog]
-
-    B --> C[AWS Lake Formation]
-
-    C --> D[Redshift Serverless<br/>Spectrum]
-
-    C --> E[Standard Analyst<br/>Filtered Access]
-
-    C --> F[Finance Analyst<br/>Full Table Access]
-
-    E --> G[PII Column Restricted<br/>customerid ❌]
-
-    F --> H[Unmasked Data<br/>customerid ✅]
-
-    I[CloudTrail] --> J[S3 Audit Bucket]
-
-    style C fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#000
-    style D fill:#232F3E,stroke:#FF9900,stroke-width:2px,color:#fff
-    style E fill:#3F8624,stroke:#232F3E,stroke-width:2px,color:#fff
-    style F fill:#3F8624,stroke:#232F3E,stroke-width:2px,color:#fff
-    style I fill:#00A4E4,stroke:#232F3E,stroke-width:2px,color:#fff
+    A --> B
+    B --> C
+    C --> D
+    C --> E
+    D --> F
+    E --> F
+    G --> H
 ```
 
-### Data Flow
-
-1. **Curated Storage — Amazon S3**
-
-   Processed e-commerce data is stored in Amazon S3 as Parquet files. The curated bucket serves as the governed analytical data layer.
-
-2. **Metadata Management — AWS Glue Data Catalog**
-
-   The curated dataset is represented as a Glue Data Catalog table, providing the schema and metadata required by downstream analytical services.
-
-3. **Governance — AWS Lake Formation**
-
-   The S3 location and Glue table are registered with Lake Formation. Lake Formation controls access to the cataloged data and provides fine-grained permissions.
-
-4. **Column-Level Security — Lake Formation Data Filters**
-
-   A Lake Formation data filter excludes the `customerid` column from the standard analyst role while allowing access to the remaining columns.
-
-   Lake Formation supports column-, row-, and cell-level filtering through data filters, and Amazon Redshift Spectrum can enforce those filters when querying Lake Formation-managed tables.
-
-5. **Analytical Serving — Amazon Redshift Serverless**
-
-   Redshift Serverless exposes the governed Glue Catalog table through an external schema using Redshift Spectrum.
-
-6. **Auditing — AWS CloudTrail**
-
-   CloudTrail records AWS API activity associated with the environment and delivers the audit logs to a dedicated S3 bucket. Log-file validation is enabled to support integrity verification of delivered CloudTrail logs.
-
----
-
-## Security Model
-
-The project demonstrates **role-based data access with column-level restrictions**.
-
-### Standard Analyst
-
-The standard analytics role receives:
-
-* Database metadata access
-* Table metadata access
-* Filtered `SELECT` access
-* Access to all permitted columns
-* **No access to `customerid`**
-
-Example:
-
-```sql
-SELECT customerid
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an";
-```
-
-Expected result:
-
-```text
-Permission denied
-```
-
-The same role can query non-sensitive fields:
-
-```sql
-SELECT country
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an";
-```
-
-Expected result:
-
-```text
-Query succeeds
-```
-
-### Finance Analyst
-
-The finance role receives full table access through Lake Formation and can query the restricted column:
-
-```sql
-SELECT customerid
-FROM finance_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an";
-```
-
-Expected result:
-
-```text
-Query succeeds
-```
-
-This demonstrates that access to sensitive data is controlled centrally through Lake Formation rather than by maintaining separate physical copies of the dataset.
-
-AWS documents Lake Formation as a centralized mechanism for controlling database, table, and column-level access for services such as Amazon Redshift Spectrum.
-
----
+The project assumes the upstream ETL pipeline has already produced curated Parquet data in S3 and registered the relevant table in the Glue Data Catalog. Terraform then provisions the governance, analytics, and audit resources around that data.
 
 ## Technology Stack
 
-| Technology                      | Purpose                                         |
-| ------------------------------- | ----------------------------------------------- |
-| **Terraform**                   | Infrastructure as Code                          |
-| **Amazon S3**                   | Curated data lake storage                       |
-| **AWS Glue Data Catalog**       | Dataset metadata and schema                     |
-| **AWS Lake Formation**          | Data governance and fine-grained access control |
-| **Lake Formation Data Filters** | Column-level PII restriction                    |
-| **Amazon Redshift Serverless**  | Serverless analytical warehouse/query layer     |
-| **Redshift Spectrum**           | Querying Glue/Lake Formation-managed S3 data    |
-| **AWS IAM**                     | Service and role-based authorization            |
-| **AWS CloudTrail**              | API activity and governance auditing            |
-| **AWS CLI**                     | Validation and operational testing              |
+| Category | Technologies |
+|---|---|
+| Infrastructure as Code | Terraform |
+| Cloud platform | AWS |
+| Data governance | AWS Lake Formation, LF-Tags, data cell filters |
+| Data catalog | AWS Glue Data Catalog |
+| Analytics | Amazon Redshift Serverless, Redshift Spectrum |
+| Storage | Amazon S3 |
+| Auditing | AWS CloudTrail |
+| Data validation | SQL |
 
----
+## Governance and Access Control
 
-## Infrastructure as Code
+This project demonstrates how different analyst roles can access the same underlying dataset with different permissions.
 
-Terraform manages the core infrastructure, including:
+### Standard Analyst
 
-* Lake Formation S3 resource registration
-* Lake Formation LF-Tags
-* Lake Formation data filters
-* Lake Formation permissions
-* IAM execution roles
-* Redshift Serverless namespace
-* Redshift Serverless workgroup
-* CloudTrail trail
-* Dedicated CloudTrail S3 audit bucket
-* S3 security controls
-* Encryption configuration
+The standard analyst role is `redshift-lakeformation-execution-role`.
 
-Terraform allows the architecture to be reproduced consistently rather than relying exclusively on manually configured AWS resources.
+- Uses the `external_standard_schema` schema.
+- Receives metadata access and filtered table access through Lake Formation.
+- Uses the `exclude_pii_user_id_filter` data cell filter, which excludes the `user_id` column.
+- Can query approved behavioral data without being granted access to that identifier through the intended Lake Formation access path.
 
----
+### Finance Analyst
 
-## Data Governance
+The finance analyst role is `finance-analyst-execution-role`.
 
-The project uses AWS Lake Formation to establish a centralized governance layer between the physical S3 data and analytical consumers.
+- Uses the `external_finance_schema` schema.
+- Receives broader table permissions through Lake Formation.
+- Can access `user_id` and other table columns for authorized analytical use cases.
 
-### LF-Tags
+**Security objective:** Apply least-privilege access so that analysts receive only the data their roles are authorized to use.
 
-The project defines LF-Tags for:
+The effective permissions should be validated end to end in AWS. IAM permissions, Redshift access, and Lake Formation permissions must work together for the intended column filter to be enforced.
 
-```text
-department
-├── analytics
-└── finance
+## Lake Formation Tag-Based Governance
 
-sensitivity
-├── restricted
-└── public
-```
+Terraform configures Lake Formation tags to classify data across two dimensions:
 
-The curated table is tagged as:
+| Tag | Values |
+|---|---|
+| `department` | `analytics`, `finance` |
+| `sensitivity` | `restricted`, `public` |
 
-```text
-department = analytics
-sensitivity = restricted
-```
+These tags provide a foundation for organizing data permissions around business roles and sensitivity classifications rather than managing every permission independently.
 
-This demonstrates the foundation for extending the architecture toward attribute-based access control as the number of datasets and organizational roles grows.
+The project also registers the curated S3 location with Lake Formation and associates governance metadata with the Glue Data Catalog table in `ecommerce_lake_v2`.
 
----
+## Serverless Analytics
+
+Amazon Redshift Serverless is provisioned with:
+
+- Namespace: `enterprise-analytics-namespace`
+- Database: `ecommerce_warehouse`
+- Workgroup: `enterprise-analytics-workgroup`
+- Base capacity: 8 Redshift Processing Units (RPUs)
+- IAM roles for standard and finance analyst access
+
+Redshift Spectrum enables queries against the cataloged S3 data without requiring the curated dataset to be loaded into local Redshift tables.
+
+The repository includes SQL examples for creating external schemas with the corresponding IAM roles and querying the governed data.
+
+## Audit Logging
+
+AWS CloudTrail is configured to record account activity and deliver logs to a dedicated S3 bucket.
+
+The audit configuration includes:
+
+- Multi-region trail.
+- Global service events.
+- Log file validation.
+- S3 public access blocking.
+- Server-side encryption using AES-256.
+- Bucket ownership controls and a private ACL configuration.
+- A bucket policy allowing CloudTrail to deliver logs.
+
+This provides an audit trail for investigating account activity and supporting governance reviews. Log file validation helps detect changes to delivered log files; it does not by itself make the logs immutable.
 
 ## Data Quality Checks
 
-The Redshift external table is also used to perform analytical data-quality checks.
+The `src/data_quality_checks.sql` file contains SQL checks against the finance external schema.
 
 ### Completeness
 
-Checks for missing critical attributes:
+Counts records with missing values in important fields:
+
+- `event_time`
+- `event_type`
+- `product_id`
+- `user_id`
+- `price`
+
+### Price validation
+
+Checks for records with negative prices.
+
+### Event type validation
+
+Checks for event types outside the expected set:
+
+- `view`
+- `cart`
+- `remove_from_cart`
+- `purchase`
+
+### Dataset profiling
+
+Includes aggregate checks for total rows, distinct users, and distinct sessions.
+
+These checks provide a starting point for validating the data exposed through the governed analytics layer.
+
+## Sample Queries
+
+The `src/sample_queries.sql` file demonstrates how to create external schemas for the two analyst roles and query the cataloged dataset.
+
+For example, after creating the appropriate external schema, a standard analyst can inspect accessible records:
 
 ```sql
-WHERE invoiceno IS NULL
-   OR stockcode IS NULL
-   OR quantity IS NULL
-   OR unitprice IS NULL;
-```
-
-### Validity
-
-Checks for invalid quantities and prices:
-
-```sql
-WHERE quantity <= 0
-   OR unitprice < 0;
-```
-
-### Business Rule Integrity
-
-Validates calculated revenue:
-
-```sql
-MIN(quantity * unitprice)
-```
-
-### Volume & Uniqueness
-
-Measures:
-
-```sql
-COUNT(*)
-COUNT(DISTINCT invoiceno)
-```
-
-These checks provide a basic data-quality validation layer on top of the governed analytical dataset.
-
----
-
-## Analytical Query Example
-
-The project supports analytical queries directly against the S3-backed external table.
-
-Example: revenue by country:
-
-```sql
-SELECT
-    country,
-    COUNT(DISTINCT invoiceno) AS total_orders,
-    SUM(quantity * unitprice) AS total_revenue
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an"
-GROUP BY 1
-HAVING SUM(quantity * unitprice) IS NOT NULL
-ORDER BY total_revenue DESC
+SELECT *
+FROM external_standard_schema.ecommerce_events
 LIMIT 10;
 ```
 
-This demonstrates querying curated Parquet data through Redshift Spectrum without requiring a separate physical copy of the dataset inside Redshift.
+A finance analyst can query the corresponding finance schema:
 
----
-
-## Audit & Security
-
-AWS CloudTrail is configured with:
-
-* Dedicated S3 audit bucket
-* S3 public-access blocking
-* Server-side encryption
-* CloudTrail log-file validation
-* Multi-region trail
-* Global service event capture
-* CloudTrail-specific S3 bucket policy
-
-CloudTrail log-file validation provides a mechanism to verify that delivered log files have not been modified or deleted after delivery.
-
----
-
-## Engineering Highlights
-
-### Fine-Grained Data Security
-
-Implemented column-level access restrictions using Lake Formation data filters rather than creating separate datasets for different users.
-
-### Infrastructure as Code
-
-Core governance, IAM, Redshift, S3, and CloudTrail infrastructure is defined through Terraform.
-
-### Serverless Analytics
-
-Uses Redshift Serverless and S3-backed external tables to provide analytical capabilities without managing traditional database servers.
-
-### Centralized Governance
-
-Lake Formation provides a centralized authorization layer for the Glue Data Catalog and underlying S3 data.
-
-### Auditable Infrastructure
-
-CloudTrail captures AWS API activity and stores audit logs separately from the analytical data.
-
-### Role-Based Access
-
-Demonstrates two analytical personas:
-
-```text
-Standard Analyst
-    ↓
-Restricted SELECT
-    ↓
-customerid ❌
-
-Finance Analyst
-    ↓
-Full Table Access
-    ↓
-customerid ✅
+```sql
+SELECT *
+FROM external_finance_schema.ecommerce_events
+LIMIT 10;
 ```
 
----
+The examples assume the Glue Catalog database, table name, IAM role permissions, and external-schema configuration match the deployed environment. Update the SQL if your configured table name differs from `ecommerce_events`.
 
 ## Project Structure
 
 ```text
 enterprise-lakehouse-governance/
-│
 ├── infrastructure/
 │   ├── main.tf
 │   ├── variables.tf
@@ -332,560 +187,119 @@ enterprise-lakehouse-governance/
 │   ├── lakeformation.tf
 │   ├── redshift.tf
 │   └── audit.tf
-│
-├── src/
-│   ├── data_quality_checks.sql
-│   └── sample_queries.sql
-│
-├── .gitignore
-├── terraform.tfvars.example
-└── README.md
+└── src/
+    ├── data_quality_checks.sql
+    └── sample_queries.sql
 ```
 
----
+### Terraform files
+
+| File | Responsibility |
+|---|---|
+| `main.tf` | Terraform and AWS provider configuration, account identity and session context |
+| `variables.tf` | Configurable deployment parameters |
+| `outputs.tf` | Outputs such as the Redshift endpoint and registered S3 location |
+| `iam.tf` | Analyst execution roles and supporting IAM policies |
+| `lakeformation.tf` | S3 data registration, LF-Tags, table governance, and data cell filters |
+| `redshift.tf` | Redshift Serverless namespace, workgroup, database, and role associations |
+| `audit.tf` | Audit S3 bucket, CloudTrail delivery policy, and trail configuration |
 
 ## Deployment
 
-### 1. Clone the repository
+### Prerequisites
+
+- An AWS account with permissions to provision the resources in this project.
+- Terraform `>= 1.6.0`.
+- AWS CLI configured with appropriate credentials.
+- An existing curated S3 dataset and Glue Data Catalog table compatible with the Terraform configuration.
+
+### 1. Configure variables
+
+Navigate to the infrastructure directory:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/enterprise-lakehouse-governance.git
-
-cd enterprise-lakehouse-governance/infrastructure
+cd infrastructure
 ```
 
-### 2. Configure Terraform variables
-
-Create a local `terraform.tfvars` file:
+Create a local `terraform.tfvars` file with your environment-specific values:
 
 ```hcl
-redshift_admin_password = "YOUR_SECURE_PASSWORD"
+aws_region           = "us-east-1"
+environment          = "demo"
+curated_bucket_arn   = "arn:aws:s3:::YOUR-CURATED-BUCKET"
+table_name           = "ecommerce_events"
+redshift_admin_password = "REPLACE_WITH_A_SECURE_PASSWORD"
 ```
 
-**Do not commit `terraform.tfvars` to Git.**
+Use a unique, existing curated bucket ARN and a strong password. Do not commit `terraform.tfvars` or real credentials to version control.
 
-The repository includes a `terraform.tfvars.example` file for configuration reference.
-
-### 3. Initialize Terraform
+### 2. Initialize Terraform
 
 ```bash
 terraform init
 ```
 
-### 4. Review the infrastructure plan
+### 3. Review the deployment plan
 
 ```bash
 terraform plan
 ```
 
-### 5. Deploy
+Review the resources and IAM permissions before proceeding.
+
+### 4. Deploy the infrastructure
 
 ```bash
 terraform apply
 ```
 
----
+Review and approve the proposed changes.
+
+### 5. Review outputs
+
+```bash
+terraform output
+```
+
+Use the Redshift endpoint output and the registered S3 location output to help validate the deployment.
 
 ## Validation
 
-After deployment, validate the environment by:
+After deployment, verify the configuration in AWS:
 
-1. Confirming the curated S3 location is registered with Lake Formation.
-2. Confirming the Glue Catalog table is available.
-3. Creating/querying the Redshift external schema.
-4. Running the analytical queries.
-5. Running the data-quality checks.
-6. Testing standard analyst access to permitted columns.
-7. Confirming standard analyst access to `customerid` is denied.
-8. Testing finance analyst access to `customerid`.
-9. Confirming CloudTrail is delivering logs to the audit bucket.
+1. Confirm the curated S3 location and Glue Catalog table exist and contain the expected dataset.
+2. Confirm the location is registered with Lake Formation.
+3. Inspect the table's LF-Tags and the `exclude_pii_user_id_filter` data cell filter.
+4. Connect to Redshift Serverless and create the external schemas using the SQL examples.
+5. Test each role separately to verify its effective column permissions.
+6. Run the SQL checks in `src/data_quality_checks.sql`.
+7. Confirm CloudTrail is logging and delivering events to the audit bucket.
 
----
+Test access using the actual IAM roles and credentials associated with each analyst workflow. Do not rely solely on the existence of a Terraform permission resource as proof that the end-to-end access path enforces the intended restrictions.
 
-## Design Considerations
+## Security and Production Considerations
 
-This is a **portfolio/demo implementation modeled on enterprise data-platform patterns**, rather than a production deployment.
+This project is a demonstration of cloud data governance and analytics infrastructure. Before using it in production:
 
-For a production environment, additional hardening would include:
+- **Network access:** Review the Redshift workgroup's public accessibility, VPC configuration, security groups, and allowed client networks.
+- **IAM permissions:** Replace broad managed policies with least-privilege policies tailored to the required workflows.
+- **PII protection:** Verify that the standard analyst cannot retrieve `user_id` through any supported query or data-access path.
+- **Credentials:** Store sensitive credentials securely and exclude local variable files from Git.
+- **Audit retention:** Define retention, lifecycle, and access policies appropriate to your compliance requirements.
+- **Log integrity:** Consider additional controls, such as S3 Object Lock, if immutable retention is required.
+- **Cost management:** Review Redshift Serverless capacity and the cost of supporting AWS resources before deploying.
 
-* Private Redshift networking
-* VPC endpoints / controlled network paths
-* More restrictive IAM policies
-* Secrets Manager or managed Redshift credentials
-* S3 versioning and retention controls for audit logs
-* Centralized logging/monitoring
-* Environment-specific Terraform configurations
-* CI/CD with automated Terraform validation
-* Remote Terraform state with locking
-* Additional Lake Formation governance policies
+## Future Improvements
 
-The project intentionally focuses on demonstrating the core architecture and governance concepts while keeping the environment practical to deploy and test.
-
----
+- Add automated integration tests for the two analyst roles.
+- Add CI/CD validation for Terraform formatting, validation, and security checks.
+- Implement automated data quality thresholds and failure alerts.
+- Strengthen audit-log retention and tamper-resistance controls.
+- Expand LF-Tag policies to support additional departments and sensitivity levels.
+- Add monitoring and cost controls for the analytics workgroup.
 
 ## Key Takeaways
 
-This project demonstrates practical experience with:
+This project demonstrates how to build a governed analytics layer over a large e-commerce dataset using AWS and Terraform. It brings together **column-level data protection, role-based permissions, catalog-driven analytics, infrastructure as code, and centralized audit logging** in a reproducible cloud architecture.
 
-* **AWS Data Engineering**
-* **Terraform / Infrastructure as Code**
-* **Amazon S3**
-* **AWS Glue Data Catalog**
-* **AWS Lake Formation**
-* **Lake Formation data filtering**
-* **Amazon Redshift Serverless**
-* **Redshift Spectrum**
-* **IAM**
-* **AWS CloudTrail**
-* **SQL data quality**
-* **Data governance**
-* **Column-level security**
-* **Serverless analytics**
-
-The central engineering objective is to demonstrate how a cloud data platform can provide **scalable analytical access while enforcing different levels of data visibility for different organizational roles**.
-=======
-# Enterprise E-Commerce Data Lakehouse & Governance
-
-A Terraform-managed AWS data lakehouse demonstrating **data governance, column-level security, serverless analytics, infrastructure as code, and auditability**.
-
-The project builds an S3-based analytical data platform in which curated e-commerce data is registered with the AWS Glue Data Catalog and governed through **AWS Lake Formation**. Amazon Redshift Serverless provides the analytical query layer through Redshift Spectrum, while AWS CloudTrail provides an auditable record of infrastructure and data-access activity.
-
-The project specifically demonstrates how the same underlying dataset can be exposed to different analytical roles with different levels of access to sensitive columns.
-
----
-
-## Architecture & Data Flow
-
-```mermaid
-graph LR
-
-    A[S3 Curated Data<br/>Parquet] --> B[AWS Glue Data Catalog]
-
-    B --> C[AWS Lake Formation]
-
-    C --> D[Redshift Serverless<br/>Spectrum]
-
-    C --> E[Standard Analyst<br/>Filtered Access]
-
-    C --> F[Finance Analyst<br/>Full Table Access]
-
-    E --> G[PII Column Restricted<br/>customerid ❌]
-
-    F --> H[Unmasked Data<br/>customerid ✅]
-
-    I[CloudTrail] --> J[S3 Audit Bucket]
-
-    style C fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#000
-    style D fill:#232F3E,stroke:#FF9900,stroke-width:2px,color:#fff
-    style E fill:#3F8624,stroke:#232F3E,stroke-width:2px,color:#fff
-    style F fill:#3F8624,stroke:#232F3E,stroke-width:2px,color:#fff
-    style I fill:#00A4E4,stroke:#232F3E,stroke-width:2px,color:#fff
-```
-
-### Data Flow
-
-1. **Curated Storage — Amazon S3**
-
-   Processed e-commerce data is stored in Amazon S3 as Parquet files. The curated bucket serves as the governed analytical data layer.
-
-2. **Metadata Management — AWS Glue Data Catalog**
-
-   The curated dataset is represented as a Glue Data Catalog table, providing the schema and metadata required by downstream analytical services.
-
-3. **Governance — AWS Lake Formation**
-
-   The S3 location and Glue table are registered with Lake Formation. Lake Formation controls access to the cataloged data and provides fine-grained permissions.
-
-4. **Column-Level Security — Lake Formation Data Filters**
-
-   A Lake Formation data filter excludes the `customerid` column from the standard analyst role while allowing access to the remaining columns.
-
-   Lake Formation supports column-, row-, and cell-level filtering through data filters, and Amazon Redshift Spectrum can enforce those filters when querying Lake Formation-managed tables.
-
-5. **Analytical Serving — Amazon Redshift Serverless**
-
-   Redshift Serverless exposes the governed Glue Catalog table through an external schema using Redshift Spectrum.
-
-6. **Auditing — AWS CloudTrail**
-
-   CloudTrail records AWS API activity associated with the environment and delivers the audit logs to a dedicated S3 bucket. Log-file validation is enabled to support integrity verification of delivered CloudTrail logs.
-
----
-
-## Security Model
-
-The project demonstrates **role-based data access with column-level restrictions**.
-
-### Standard Analyst
-
-The standard analytics role receives:
-
-* Database metadata access
-* Table metadata access
-* Filtered `SELECT` access
-* Access to all permitted columns
-* **No access to `customerid`**
-
-Example:
-
-```sql
-SELECT customerid
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an";
-```
-
-Expected result:
-
-```text
-Permission denied
-```
-
-The same role can query non-sensitive fields:
-
-```sql
-SELECT country
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an";
-```
-
-Expected result:
-
-```text
-Query succeeds
-```
-
-### Finance Analyst
-
-The finance role receives full table access through Lake Formation and can query the restricted column:
-
-```sql
-SELECT customerid
-FROM finance_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an";
-```
-
-Expected result:
-
-```text
-Query succeeds
-```
-
-This demonstrates that access to sensitive data is controlled centrally through Lake Formation rather than by maintaining separate physical copies of the dataset.
-
-AWS documents Lake Formation as a centralized mechanism for controlling database, table, and column-level access for services such as Amazon Redshift Spectrum.
-
----
-
-## Technology Stack
-
-| Technology                      | Purpose                                         |
-| ------------------------------- | ----------------------------------------------- |
-| **Terraform**                   | Infrastructure as Code                          |
-| **Amazon S3**                   | Curated data lake storage                       |
-| **AWS Glue Data Catalog**       | Dataset metadata and schema                     |
-| **AWS Lake Formation**          | Data governance and fine-grained access control |
-| **Lake Formation Data Filters** | Column-level PII restriction                    |
-| **Amazon Redshift Serverless**  | Serverless analytical warehouse/query layer     |
-| **Redshift Spectrum**           | Querying Glue/Lake Formation-managed S3 data    |
-| **AWS IAM**                     | Service and role-based authorization            |
-| **AWS CloudTrail**              | API activity and governance auditing            |
-| **AWS CLI**                     | Validation and operational testing              |
-
----
-
-## Infrastructure as Code
-
-Terraform manages the core infrastructure, including:
-
-* Lake Formation S3 resource registration
-* Lake Formation LF-Tags
-* Lake Formation data filters
-* Lake Formation permissions
-* IAM execution roles
-* Redshift Serverless namespace
-* Redshift Serverless workgroup
-* CloudTrail trail
-* Dedicated CloudTrail S3 audit bucket
-* S3 security controls
-* Encryption configuration
-
-Terraform allows the architecture to be reproduced consistently rather than relying exclusively on manually configured AWS resources.
-
----
-
-## Data Governance
-
-The project uses AWS Lake Formation to establish a centralized governance layer between the physical S3 data and analytical consumers.
-
-### LF-Tags
-
-The project defines LF-Tags for:
-
-```text
-department
-├── analytics
-└── finance
-
-sensitivity
-├── restricted
-└── public
-```
-
-The curated table is tagged as:
-
-```text
-department = analytics
-sensitivity = restricted
-```
-
-This demonstrates the foundation for extending the architecture toward attribute-based access control as the number of datasets and organizational roles grows.
-
----
-
-## Data Quality Checks
-
-The Redshift external table is also used to perform analytical data-quality checks.
-
-### Completeness
-
-Checks for missing critical attributes:
-
-```sql
-WHERE invoiceno IS NULL
-   OR stockcode IS NULL
-   OR quantity IS NULL
-   OR unitprice IS NULL;
-```
-
-### Validity
-
-Checks for invalid quantities and prices:
-
-```sql
-WHERE quantity <= 0
-   OR unitprice < 0;
-```
-
-### Business Rule Integrity
-
-Validates calculated revenue:
-
-```sql
-MIN(quantity * unitprice)
-```
-
-### Volume & Uniqueness
-
-Measures:
-
-```sql
-COUNT(*)
-COUNT(DISTINCT invoiceno)
-```
-
-These checks provide a basic data-quality validation layer on top of the governed analytical dataset.
-
----
-
-## Analytical Query Example
-
-The project supports analytical queries directly against the S3-backed external table.
-
-Example: revenue by country:
-
-```sql
-SELECT
-    country,
-    COUNT(DISTINCT invoiceno) AS total_orders,
-    SUM(quantity * unitprice) AS total_revenue
-FROM external_ecommerce."ismael_ecommerce_processed_065320271591_us_east_1_an"
-GROUP BY 1
-HAVING SUM(quantity * unitprice) IS NOT NULL
-ORDER BY total_revenue DESC
-LIMIT 10;
-```
-
-This demonstrates querying curated Parquet data through Redshift Spectrum without requiring a separate physical copy of the dataset inside Redshift.
-
----
-
-## Audit & Security
-
-AWS CloudTrail is configured with:
-
-* Dedicated S3 audit bucket
-* S3 public-access blocking
-* Server-side encryption
-* CloudTrail log-file validation
-* Multi-region trail
-* Global service event capture
-* CloudTrail-specific S3 bucket policy
-
-CloudTrail log-file validation provides a mechanism to verify that delivered log files have not been modified or deleted after delivery.
-
----
-
-## Engineering Highlights
-
-### Fine-Grained Data Security
-
-Implemented column-level access restrictions using Lake Formation data filters rather than creating separate datasets for different users.
-
-### Infrastructure as Code
-
-Core governance, IAM, Redshift, S3, and CloudTrail infrastructure is defined through Terraform.
-
-### Serverless Analytics
-
-Uses Redshift Serverless and S3-backed external tables to provide analytical capabilities without managing traditional database servers.
-
-### Centralized Governance
-
-Lake Formation provides a centralized authorization layer for the Glue Data Catalog and underlying S3 data.
-
-### Auditable Infrastructure
-
-CloudTrail captures AWS API activity and stores audit logs separately from the analytical data.
-
-### Role-Based Access
-
-Demonstrates two analytical personas:
-
-```text
-Standard Analyst
-    ↓
-Restricted SELECT
-    ↓
-customerid ❌
-
-Finance Analyst
-    ↓
-Full Table Access
-    ↓
-customerid ✅
-```
-
----
-
-## Project Structure
-
-```text
-enterprise-lakehouse-governance/
-│
-├── infrastructure/
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── iam.tf
-│   ├── lakeformation.tf
-│   ├── redshift.tf
-│   └── audit.tf
-│
-├── src/
-│   ├── data_quality_checks.sql
-│   └── sample_queries.sql
-│
-├── .gitignore
-├── terraform.tfvars.example
-└── README.md
-```
-
----
-
-## Deployment
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/enterprise-lakehouse-governance.git
-
-cd enterprise-lakehouse-governance/infrastructure
-```
-
-### 2. Configure Terraform variables
-
-Create a local `terraform.tfvars` file:
-
-```hcl
-redshift_admin_password = "YOUR_SECURE_PASSWORD"
-```
-
-**Do not commit `terraform.tfvars` to Git.**
-
-The repository includes a `terraform.tfvars.example` file for configuration reference.
-
-### 3. Initialize Terraform
-
-```bash
-terraform init
-```
-
-### 4. Review the infrastructure plan
-
-```bash
-terraform plan
-```
-
-### 5. Deploy
-
-```bash
-terraform apply
-```
-
----
-
-## Validation
-
-After deployment, validate the environment by:
-
-1. Confirming the curated S3 location is registered with Lake Formation.
-2. Confirming the Glue Catalog table is available.
-3. Creating/querying the Redshift external schema.
-4. Running the analytical queries.
-5. Running the data-quality checks.
-6. Testing standard analyst access to permitted columns.
-7. Confirming standard analyst access to `customerid` is denied.
-8. Testing finance analyst access to `customerid`.
-9. Confirming CloudTrail is delivering logs to the audit bucket.
-
----
-
-## Design Considerations
-
-This is a **portfolio/demo implementation modeled on enterprise data-platform patterns**, rather than a production deployment.
-
-For a production environment, additional hardening would include:
-
-* Private Redshift networking
-* VPC endpoints / controlled network paths
-* More restrictive IAM policies
-* Secrets Manager or managed Redshift credentials
-* S3 versioning and retention controls for audit logs
-* Centralized logging/monitoring
-* Environment-specific Terraform configurations
-* CI/CD with automated Terraform validation
-* Remote Terraform state with locking
-* Additional Lake Formation governance policies
-
-The project intentionally focuses on demonstrating the core architecture and governance concepts while keeping the environment practical to deploy and test.
-
----
-
-## Key Takeaways
-
-This project demonstrates practical experience with:
-
-* **AWS Data Engineering**
-* **Terraform / Infrastructure as Code**
-* **Amazon S3**
-* **AWS Glue Data Catalog**
-* **AWS Lake Formation**
-* **Lake Formation data filtering**
-* **Amazon Redshift Serverless**
-* **Redshift Spectrum**
-* **IAM**
-* **AWS CloudTrail**
-* **SQL data quality**
-* **Data governance**
-* **Column-level security**
-* **Serverless analytics**
-
-The central engineering objective is to demonstrate how a cloud data platform can provide **scalable analytical access while enforcing different levels of data visibility for different organizational roles**.
->>>>>>> 51b372f1825fe4fd6dad12d133268d8c9ff99942
+The emphasis is not just on querying data at scale, but on controlling who can access sensitive fields and establishing an auditable foundation for analytical workloads.
